@@ -1,0 +1,21 @@
+[package]
+name = "include-cargo-toml"
+description = "Load properties of Cargo.toml at compile time"
+version = "0.1.0"
+edition = "2021"
+keywords = ["macro", "version", "Cargo.toml", "compile-time", "parse"]
+categories = ["command-line-interface", "config", "development-tools::build-utils", "development-tools"]
+readme = "README.md"
+license-file = "LICENSE"
+documentation = "https://docs.rs/include-cargo-toml/"
+repository = "https://github.com/cpu-runtime/include-cargo-toml"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1"
+syn = "1"
+toml = "0"
+proc-macro2 = "1"
+cargo_toml = "0"
