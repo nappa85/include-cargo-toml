@@ -108,7 +108,7 @@ fn toml_to_ts(input: Value) -> TokenStream2 {
 /// - TOML [array](Value::Array) -> Rust tuple \
 ///     TOML arrays can hold different types, Rust [`Vec`]s can't.
 /// - TOML [table](Value::Table) -> Rust tuple \
-///     TOML tables can hold different types, Rust [`Vec`]s can't.
+///     TOML tables can hold different types, Rust [`HashMap`](std::collections::HashMap)s can't.
 ///
 /// # Example
 ///
