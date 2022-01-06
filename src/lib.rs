@@ -128,7 +128,7 @@ fn toml_to_ts(input: Value) -> TokenStream2 {
 /// // indexing array with literal 2
 /// assert_eq!(
 ///     include_toml!("package"."keywords".2),
-///     "Cargo.toml"
+///     "Cargo-toml"
 /// );
 /// assert_eq!(
 ///     include_toml!("lib"."proc-macro"),
@@ -143,7 +143,7 @@ fn toml_to_ts(input: Value) -> TokenStream2 {
 ///
 /// assert_eq!(
 ///     include_toml!("package"."keywords"),
-///     ("macro", "version", "Cargo.toml", "compile-time", "parse")
+///     ("macro", "version", "Cargo-toml", "compile-time", "parse")
 /// );
 /// ```
 ///
