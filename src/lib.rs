@@ -157,15 +157,17 @@ pub fn include_toml(input: TokenStream) -> TokenStream {
 #[proc_macro]
 /// Same as `include_toml` but includes main project Cargo.toml
 /// E.g. when building a bin crate, returns bin crates's Cargo.toml even if used from a dependency crate
-/// Actually current dir is retrieved using PWD env var, could fail in some build environments
+/// Actually current dir is retrieved using PWD env var and fallback to `std::env::current_dir`
 pub fn include_main_toml(input: TokenStream) -> TokenStream {
     // parse input
     let input: TomlIndex = parse_macro_input!(input);
 
-    // match std::env::current_dir() {
-    match option_env!("PWD").ok_or("Can't find PWD env var") {
-        Ok(pwd) => {
-            let mut main_dir = PathBuf::from(pwd);
+    let current_dir = option_env!("PWD")
+        .map(PathBuf::from)
+        .ok_or(())
+        .or_else(|_| std::env::current_dir().map_err(|e| SynError::new(Span2::call_site(), e)));
+    match current_dir {
+        Ok(mut main_dir) => {
             main_dir.push("Cargo.toml");
 
             _include_toml(main_dir, input)
