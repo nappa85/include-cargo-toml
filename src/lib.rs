@@ -178,12 +178,8 @@ pub fn include_main_toml(input: TokenStream) -> TokenStream {
 fn _include_toml(path: impl AsRef<Path>, input: TomlIndex) -> Result<TokenStream2, SynError> {
     // get Cargo.toml contents
     // using Manifest here eliminates subfolder problems
-    let cargo_toml: Manifest = Manifest::from_path_with_metadata(&path).map_err(|e| {
-        SynError::new(
-            Span2::call_site(),
-            format!("Error opening {}: {e}", path.as_ref().display()),
-        )
-    })?;
+    let cargo_toml: Manifest = Manifest::from_path_with_metadata(&path)
+        .map_err(|e| SynError::new(Span2::call_site(), e))?;
     // parse Cargo.toml contents as TOML
     let mut cargo_toml_toml: Value =
         Value::try_from(cargo_toml).map_err(|e| SynError::new(Span2::call_site(), e))?;
