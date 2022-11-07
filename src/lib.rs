@@ -1,25 +1,18 @@
 //! This crate provides a macro called [`include_toml!`] which parses properties of `Cargo.toml` at compile time.
 
-extern crate cargo_toml;
-extern crate proc_macro;
-extern crate proc_macro2;
-extern crate quote;
-extern crate syn;
-extern crate toml;
+use std::path::{Path, PathBuf};
 
-use crate::{
-    cargo_toml::Manifest,
-    proc_macro::TokenStream,
-    proc_macro2::{Literal, Span as Span2, TokenStream as TokenStream2},
-    quote::{quote, ToTokens},
-    syn::{
-        parse::{Parse, ParseBuffer},
-        parse_macro_input,
-        token::Dot,
-        Error as SynError, Lit, LitBool,
-    },
-    toml::Value,
+use cargo_toml::Manifest;
+use proc_macro::TokenStream;
+use proc_macro2::{Literal, Span as Span2, TokenStream as TokenStream2};
+use quote::{quote, ToTokens};
+use syn::{
+    parse::{Parse, ParseBuffer},
+    parse_macro_input,
+    token::Dot,
+    Error as SynError, Lit, LitBool,
 };
+use toml::Value;
 
 /// Helper that stores either integer or string.
 ///
@@ -46,7 +39,7 @@ impl Parse for TomlIndex {
                         lit_int
                             .base10_digits()
                             .parse()
-                            .expect("Cannot parse literal integer"),
+                            .map_err(|e| SynError::new(input.span(), e))?,
                     ),
                     _ => return Err(SynError::new(input.span(), "Unsupported literal")),
                 },
@@ -57,7 +50,7 @@ impl Parse for TomlIndex {
                     ))
                 }
             });
-            if let Err(_) = input.parse::<Dot>() {
+            if input.parse::<Dot>().is_err() {
                 another_one = false;
             }
         }
@@ -68,15 +61,11 @@ impl Parse for TomlIndex {
 /// Converts any TOML value to valid Rust types.
 fn toml_to_ts(input: Value) -> TokenStream2 {
     match input {
-        Value::String(s) => Lit::new(Literal::string(&s)).to_token_stream().into(),
-        Value::Integer(i) => Lit::new(Literal::i64_suffixed(i)).to_token_stream().into(),
-        Value::Float(f) => Lit::new(Literal::f64_suffixed(f)).to_token_stream().into(),
-        Value::Datetime(d) => Lit::new(Literal::string(&d.to_string()))
-            .to_token_stream()
-            .into(),
-        Value::Boolean(b) => Lit::Bool(LitBool::new(b, Span2::call_site()))
-            .to_token_stream()
-            .into(),
+        Value::String(s) => Lit::new(Literal::string(&s)).to_token_stream(),
+        Value::Integer(i) => Lit::new(Literal::i64_suffixed(i)).to_token_stream(),
+        Value::Float(f) => Lit::new(Literal::f64_suffixed(f)).to_token_stream(),
+        Value::Datetime(d) => Lit::new(Literal::string(&d.to_string())).to_token_stream(),
+        Value::Boolean(b) => Lit::Bool(LitBool::new(b, Span2::call_site())).to_token_stream(),
         Value::Array(a) => {
             let mut ts = TokenStream2::new();
             for value in a {
@@ -159,13 +148,44 @@ fn toml_to_ts(input: Value) -> TokenStream2 {
 pub fn include_toml(input: TokenStream) -> TokenStream {
     // parse input
     let input: TomlIndex = parse_macro_input!(input);
+
+    _include_toml("Cargo.toml", input)
+        .unwrap_or_else(SynError::into_compile_error)
+        .into()
+}
+
+#[proc_macro]
+/// Same as `include_toml` but includes main project Cargo.toml
+/// E.g. when building a bin crate, returns bin crates's Cargo.toml even if used from a dependency crate
+/// Actually current dir is retrieved using PWD env var, could fail in some build environments
+pub fn include_main_toml(input: TokenStream) -> TokenStream {
+    // parse input
+    let input: TomlIndex = parse_macro_input!(input);
+
+    // match std::env::current_dir() {
+    match option_env!("PWD").ok_or("Can't find PWD env var") {
+        Ok(pwd) => {
+            let mut main_dir = PathBuf::from(pwd);
+            main_dir.push("Cargo.toml");
+
+            _include_toml(main_dir, input)
+                .unwrap_or_else(SynError::into_compile_error)
+                .into()
+        }
+        Err(e) => SynError::new(Span2::call_site(), e)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+fn _include_toml(path: impl AsRef<Path>, input: TomlIndex) -> Result<TokenStream2, SynError> {
     // get Cargo.toml contents
     // using Manifest here eliminates subfolder problems
-    let cargo_toml: Manifest =
-        Manifest::from_path_with_metadata("Cargo.toml").expect("Cannot read Cargo.toml");
+    let cargo_toml: Manifest = Manifest::from_path_with_metadata(path)
+        .map_err(|e| SynError::new(Span2::call_site(), e))?;
     // parse Cargo.toml contents as TOML
     let mut cargo_toml_toml: Value =
-        Value::try_from(cargo_toml).expect("Cannot parse Cargo.toml to json");
+        Value::try_from(cargo_toml).map_err(|e| SynError::new(Span2::call_site(), e))?;
     // get wanted field by traversing through TOML structure
     for item in input.0 {
         match item {
@@ -178,5 +198,5 @@ pub fn include_toml(input: TokenStream) -> TokenStream {
         }
     }
     // convert toml value to TokenStream
-    toml_to_ts(cargo_toml_toml).into()
+    Ok(toml_to_ts(cargo_toml_toml))
 }
