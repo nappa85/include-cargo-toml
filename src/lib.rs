@@ -157,34 +157,33 @@ pub fn include_toml(input: TokenStream) -> TokenStream {
 #[proc_macro]
 /// Same as `include_toml` but includes main project Cargo.toml
 /// E.g. when building a bin crate, returns bin crates's Cargo.toml even if used from a dependency crate
-/// Actually current dir is retrieved using PWD env var and fallback to `std::env::current_dir`
+/// Actually current dir is retrieved using PWD env var and fallback to same behaviour as `include_toml'
 pub fn include_main_toml(input: TokenStream) -> TokenStream {
     // parse input
     let input: TomlIndex = parse_macro_input!(input);
 
-    let current_dir = option_env!("PWD")
-        .map(PathBuf::from)
-        .ok_or(())
-        .or_else(|_| std::env::current_dir().map_err(|e| SynError::new(Span2::call_site(), e)));
-    match current_dir {
-        Ok(mut main_dir) => {
-            main_dir.push("Cargo.toml");
-
-            _include_toml(main_dir, input)
-                .unwrap_or_else(SynError::into_compile_error)
-                .into()
-        }
-        Err(e) => SynError::new(Span2::call_site(), e)
-            .into_compile_error()
-            .into(),
+    let cargo_toml = std::env::var("PWD").map(|pwd| {
+        let mut main_dir = PathBuf::from(pwd);
+        main_dir.push("Cargo.toml");
+        main_dir
+    });
+    match cargo_toml {
+        Ok(path) if path.exists() => _include_toml(path, input),
+        _ => _include_toml("Cargo.toml", input),
     }
+    .unwrap_or_else(SynError::into_compile_error)
+    .into()
 }
 
 fn _include_toml(path: impl AsRef<Path>, input: TomlIndex) -> Result<TokenStream2, SynError> {
     // get Cargo.toml contents
     // using Manifest here eliminates subfolder problems
-    let cargo_toml: Manifest = Manifest::from_path_with_metadata(path)
-        .map_err(|e| SynError::new(Span2::call_site(), e))?;
+    let cargo_toml: Manifest = Manifest::from_path_with_metadata(&path).map_err(|e| {
+        SynError::new(
+            Span2::call_site(),
+            format!("Error opening {}: {e}", path.as_ref().display()),
+        )
+    })?;
     // parse Cargo.toml contents as TOML
     let mut cargo_toml_toml: Value =
         Value::try_from(cargo_toml).map_err(|e| SynError::new(Span2::call_site(), e))?;
